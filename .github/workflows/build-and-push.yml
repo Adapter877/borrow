@@ -69,6 +69,7 @@ jobs:
         run: |
           echo "Updating image to: ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"
           yq eval '.spec.template.spec.containers[0].image = "ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"' -i deployment/deployment.yaml
+          git cd deployment
           git add deployment/deployment.yaml
           git commit -m "Update image to ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"
           git push
