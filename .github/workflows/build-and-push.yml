@@ -1,13 +1,11 @@
-name: Deploy-Dev
+name: Release
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
 
 env:
-  # Use ghcr.io for GitHub Container Registry
   REGISTRY: ghcr.io
-  # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
@@ -17,24 +15,30 @@ jobs:
       contents: read
       packages: write
       id-token: write
-
+    outputs:
+      image_tags: ${{ steps.meta.outputs.tags }}
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Setup Docker buildx
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3.1.1
+        with:
+          cosign-release: 'v2.1.1'
+
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v2
 
-      # Login to GitHub Container Registry
-      - name: Log into GitHub Container Registry
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Extract metadata (tags, labels) for Docker
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v4
@@ -42,21 +46,32 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix={{branch}}-,format=short
+      
 
-      # Build and push Docker image
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-20.04
 
-      # Rename deployment files
-      - name: Rename deployment files
+    steps:
+      - name: Setup Git
         run: |
-          #!/bin/bash
-          for file in $(find . -type f -name "*deployment*"); do
-            new_file=$(echo $file | sed 's/deployment/deploy/g')
-            mv "$file" "$new_file"
-          done
+          git config --global user.name "Github Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Checkout gitops repository
+        uses: actions/checkout@v3
+        with:
+          repository: Adapter877/sci-borrow
+          ref: main
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Update image in deployment file
+        run: |
+          echo "Updating image to: ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"
+          yq eval '.spec.template.spec.containers[0].image = "ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"' -i deployment/deployment.yaml
+          git add deployment/deployment.yaml
+          git commit -m "Update image to ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"
+          git push
+
+      - name: Check deployment file content
+        run: cat deployment/deployment.yaml
