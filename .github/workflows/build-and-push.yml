@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 env:
-  # ใช้ ghcr.io สำหรับ GitHub Container Registry
+  # Use ghcr.io for GitHub Container Registry
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
@@ -37,11 +37,11 @@ jobs:
       # Extract metadata (tags, labels) for Docker
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
+            type=sha,prefix={{branch}}-,format=short
 
       # Build and push Docker image
       - name: Build and push Docker image
@@ -51,3 +51,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Rename deployment files
+      - name: Rename deployment files
+        run: |
+          #!/bin/bash
+          for file in $(find . -type f -name "*deployment*"); do
+            new_file=$(echo $file | sed 's/deployment/deploy/g')
+            mv "$file" "$new_file"
+          done
