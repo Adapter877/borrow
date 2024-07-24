@@ -62,6 +62,9 @@ jobs:
 
 
 
+      - name: List files in deployment directory
+        run: ls -R
+
       - name: Update image in deployment file
         run: |
           echo "Updating image to: ghcr.io/adapter877/sci-borrow:${{ needs.build.outputs.image_tags }}"
